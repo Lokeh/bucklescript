@@ -49,9 +49,30 @@ external race : 'a t array -> 'a t = "race" [@@bs.val] [@@bs.scope "Promise"]
 
 external then_ : ('a -> 'b t [@bs.uncurry]) -> 'b t = "then" [@@bs.send.pipe: 'a t]
 
-
-
 external catch : (error -> 'a t [@bs.uncurry]) -> 'a t = "catch" [@@bs.send.pipe: 'a t]
+
+module Monad =
+  struct
+    let return = resolve
+    let make = make
+    let bind = then_
+    let map fn = bind @@ (fun v  -> return (fn v))
+    let join plist = ((Array.of_list plist) |> all) |> (map Array.to_list)
+    let race plist = race @@ (Array.of_list plist)
+    let tap fn = bind (fun v  -> fn v; return v)
+    let complete (fn : 'a -> unit t) = ignore @@ (bind @@ (fun v  -> fn v))
+    let async (fn : unit -> 'a t) = ignore @@ (fn ())
+    module Infix =
+      struct
+        let (>>=) p fn = bind fn p
+        let (=<<) = bind
+        let (>|=) p fn = map fn p
+        let (=|<) = map
+        let (<?>) p p' = race [p; p']
+        let (<&>) p p' = join [p; p']
+      end
+  end
+
 (* [ p|> catch handler]
     Note in JS the returned promise type is actually runtime dependent, 
     if promise is rejected, it will pick the [handler] otherwise the original promise, 
