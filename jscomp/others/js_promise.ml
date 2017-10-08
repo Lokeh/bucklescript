@@ -52,16 +52,46 @@ external then_ : ('a -> 'b t [@bs.uncurry]) -> 'b t = "then" [@@bs.send.pipe: 'a
 external catch : (error -> 'a t [@bs.uncurry]) -> 'a t = "catch" [@@bs.send.pipe: 'a t]
 
 module Monad =
+  (*
+   * This is module that provides a more monadic API for JS Promises. 
+   *)
   struct
+    (* Create a promise that resolves with a value *)
     let return = resolve
-    let make = make
+
+    (* Takes a promise and function that maps a value to a new promise-d value.
+       Returns a promise that resolves with the value.
+       NOTE: THIS IS UNSAFE; you probably want `map` instead *)
     let bind = then_
+
+    (* Takes a promise and function that maps a value to another value.
+       Returns a promise that resolves with the value *)
     let map fn = bind @@ (fun v  -> return (fn v))
+
+    (* Takes a `List` of promises, and returns a promise that resolves with
+       a List of all resolved values. If any promises reject, the whole thing rejects *)
     let join plist = ((Array.of_list plist) |> all) |> (map Array.to_list)
-    let race plist = race @@ (Array.of_list plist)
+
+    (* Takes a `List` of promises and returns a promise that resolves with the value
+       of the first promise that resolves in the list *)
+    let choose plist = race @@ (Array.of_list plist)
+
+    (* Takes a promise and a function that does a side effect;
+       resolves with the original value *)
     let tap fn = bind (fun v  -> fn v; return v)
-    let complete (fn : 'a -> unit t) = ignore @@ (bind @@ (fun v  -> fn v))
+
+    (* Takes a promise-returning function and returns unit
+       great for starting an async process that you don't care whether it
+       succeeds or fails *)
     let async (fn : unit -> 'a t) = ignore @@ (fn ())
+
+    (* `fail e` returns a promise that fails with the exception e. *)
+    let fail = reject
+
+    (* `fail_with msg` returns a promsie that fails with `Failure msg` *)
+    let fail_with msg = reject (Failure msg)
+
+
     module Infix =
       struct
         let (>>=) p fn = bind fn p
